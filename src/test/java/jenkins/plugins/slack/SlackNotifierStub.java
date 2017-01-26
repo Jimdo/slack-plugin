@@ -2,14 +2,14 @@ package jenkins.plugins.slack;
 
 public class SlackNotifierStub extends SlackNotifier {
 
-    public SlackNotifierStub(String teamDomain, String authToken, String authTokenCredentialId, String room,
+    public SlackNotifierStub(String teamDomain, String authToken, boolean botUser, String room, String authTokenCredentialId,
                              String sendAs, boolean startNotification, boolean notifyAborted, boolean notifyFailure,
                              boolean notifyNotBuilt, boolean notifySuccess, boolean notifyUnstable, boolean notifyBackToNormal,
-                             boolean notifyRepeatedFailure, boolean includeTestSummary, CommitInfoChoice commitInfoChoice,
+                             boolean notifyRepeatedFailure, int numberOfFailuresAfterToNotify, boolean notifyFailureAfterNTimess, boolean includeTestSummary, CommitInfoChoice commitInfoChoice,
                              boolean includeCustomMessage, String customMessage) {
-        super(teamDomain, authToken, authTokenCredentialId, room, sendAs, startNotification, notifyAborted, notifyFailure,
-                notifyNotBuilt, notifySuccess, notifyUnstable, notifyBackToNormal, notifyRepeatedFailure,
-                includeTestSummary, commitInfoChoice, includeCustomMessage, customMessage);
+        super(teamDomain, authToken, botUser, authTokenCredentialId, room, sendAs, startNotification, notifyAborted, notifyFailure,
+                notifyNotBuilt, notifySuccess, notifyUnstable, notifyBackToNormal, notifyRepeatedFailure, numberOfFailuresAfterToNotify,
+                notifyFailureAfterNTimess, includeTestSummary, commitInfoChoice, includeCustomMessage, customMessage);
     }
 
     public static class DescriptorImplStub extends SlackNotifier.DescriptorImpl {
@@ -21,7 +21,7 @@ public class SlackNotifierStub extends SlackNotifier {
         }
 
         @Override
-        SlackService getSlackService(final String teamDomain, final String authToken, final String authTokenCredentialId, final String room) {
+        SlackService getSlackService(final String teamDomain, final String authToken, final String authTokenCredentialId, final boolean botUser, final String room) {
             return slackService;
         }
 

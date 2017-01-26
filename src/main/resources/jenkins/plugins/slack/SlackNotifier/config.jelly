@@ -33,6 +33,12 @@
             <f:checkbox name="slackNotifyRepeatedFailure" value="true"
                         checked="${instance.getNotifyRepeatedFailure()}"/>
         </f:entry>
+        <f:optionalBlock title="Notify after N Failures" name="slackNotifyFailureAfterNTimess"> checked="${instance.getNotifyFailureAfterNTimes()}">
+            <f:entry title="Put in number of failures" field="numberOfFailuresAfterToNotify">
+                <f:textarea name="numberOfFailuresAfterToNotify" value="${instance.getNumberOfFailuresAfterToNotify()}" />
+            </f:entry>
+        </f:optionalBlock>
+
         <f:entry title="Include Test Summary">
             <f:checkbox name="includeTestSummary" value="true" checked="${instance.includeTestSummary()}"/>
         </f:entry>
@@ -61,6 +67,10 @@
 
         <f:entry title="Integration Token Credential ID" help="/plugin/slack/help-projectConfig-slackTokenCredentialId.html" field="tokenCredentialId" name="tokenCredentialId" >
             <c:select value="${instance.getAuthTokenCredentialId()}"/>
+        </f:entry>
+
+        <f:entry title="Is Bot User?" help="/plugin/slack/help-projectConfig-botUser.html">
+            <f:checkbox name="slackBotUser" value="true" checked="${instance.getBotUser()}"/>
         </f:entry>
 
         <f:entry title="Project Channel" help="/plugin/slack/help-projectConfig-slackRoom.html">

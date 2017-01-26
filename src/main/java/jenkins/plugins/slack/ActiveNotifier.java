@@ -20,11 +20,15 @@ import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.displayurlapi.DisplayURLProvider;
 
 import java.io.IOException;
+import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.SEVERE;
@@ -96,6 +100,19 @@ public class ActiveNotifier implements FineGrainedNotifier {
             previousBuild = previousBuild.getPreviousCompletedBuild();
         } while (previousBuild != null && previousBuild.getResult() == Result.ABORTED);
         Result previousResult = (previousBuild != null) ? previousBuild.getResult() : Result.SUCCESS;
+
+        AbstractBuild<?, ?> oldBuild = project.getLastBuild();
+
+        int N = notifier.getNumberOfFailuresAfterToNotify();
+        int count = 0;
+        for (int i=0; i<N; i++) {
+            if (oldBuild.getPreviousCompletedBuild() != null && oldBuild.getResult() == Result.ABORTED) {
+                count++;
+                oldBuild = oldBuild.getPreviousCompletedBuild();
+            }
+
+        }
+
         if ((result == Result.ABORTED && notifier.getNotifyAborted())
                 || (result == Result.FAILURE //notify only on single failed build
                     && previousResult != Result.FAILURE
@@ -103,6 +120,9 @@ public class ActiveNotifier implements FineGrainedNotifier {
                 || (result == Result.FAILURE //notify only on repeated failures
                     && previousResult == Result.FAILURE
                     && notifier.getNotifyRepeatedFailure())
+                || (result == Result.FAILURE //notify only after N repeated failures
+                    && count == N
+                    && notifier.getNotifyFailureAfterNTimes())
                 || (result == Result.NOT_BUILT && notifier.getNotifyNotBuilt())
                 || (result == Result.SUCCESS
                     && (previousResult == Result.FAILURE || previousResult == Result.UNSTABLE)
@@ -217,6 +237,8 @@ public class ActiveNotifier implements FineGrainedNotifier {
 
     public static class MessageBuilder {
 
+        private static final Pattern aTag = Pattern.compile("(?i)<a([^>]+)>(.+?)</a>");
+        private static final Pattern href = Pattern.compile("\\s*(?i)href\\s*=\\s*(\"([^\"]*\")|'[^']*'|([^'\">\\s]+))");
         private static final String STARTING_STATUS_MESSAGE = "Starting...",
                                     BACK_TO_NORMAL_STATUS_MESSAGE = "Back to normal",
                                     STILL_FAILING_STATUS_MESSAGE = "Still Failing",
@@ -373,23 +395,46 @@ public class ActiveNotifier implements FineGrainedNotifier {
         }
         
         private String createBackToNormalDurationString(){
+            // This status code guarantees that the previous build fails and has been successful before
+            // The back to normal time is the time since the build first broke
             Run previousSuccessfulBuild = build.getPreviousSuccessfulBuild();
-            long previousSuccessStartTime = previousSuccessfulBuild.getStartTimeInMillis();
-            long previousSuccessDuration = previousSuccessfulBuild.getDuration();
-            long previousSuccessEndTime = previousSuccessStartTime + previousSuccessDuration;
+            Run initialFailureAfterPreviousSuccessfulBuild = previousSuccessfulBuild.getNextBuild();
+            long initialFailureStartTime = initialFailureAfterPreviousSuccessfulBuild.getStartTimeInMillis();
+            long initialFailureDuration = initialFailureAfterPreviousSuccessfulBuild.getDuration();
+            long initialFailureEndTime = initialFailureStartTime + initialFailureDuration;
             long buildStartTime = build.getStartTimeInMillis();
             long buildDuration = build.getDuration();
             long buildEndTime = buildStartTime + buildDuration;
-            long backToNormalDuration = buildEndTime - previousSuccessEndTime;
+            long backToNormalDuration = buildEndTime - initialFailureEndTime;
             return Util.getTimeSpanString(backToNormalDuration);
         }
 
-        public String escape(String string) {
+        private String escapeCharacters(String string) {
             string = string.replace("&", "&amp;");
             string = string.replace("<", "&lt;");
             string = string.replace(">", "&gt;");
 
             return string;
+        }
+
+        private String[] extractReplaceLinks(Matcher aTag, StringBuffer sb) {
+            int size = 0;
+            List<String> links = new ArrayList<String>();
+            while (aTag.find()) {
+                Matcher url = href.matcher(aTag.group(1));
+                if (url.find()) {
+                    aTag.appendReplacement(sb,String.format("{%s}", size++));
+                    links.add(String.format("<%s|%s>", url.group(1).replaceAll("\"", ""), aTag.group(2)));
+                }
+            }
+            aTag.appendTail(sb);
+            return links.toArray(new String[size]);
+        }
+
+        public String escape(String string) {
+            StringBuffer pattern = new StringBuffer();
+            String[] links = extractReplaceLinks(aTag.matcher(string), pattern);
+            return MessageFormat.format(escapeCharacters(pattern.toString()), links);
         }
 
         public String toString() {

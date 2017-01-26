@@ -8,6 +8,7 @@ import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Descriptor;
 import hudson.model.listeners.ItemListener;
 import hudson.security.ACL;
@@ -18,7 +19,9 @@ import hudson.tasks.Publisher;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
+import jenkins.plugins.slack.config.ItemConfigMigrator;
 import net.sf.json.JSONObject;
+
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.displayurlapi.DisplayURLProvider;
 import org.jenkinsci.plugins.plaincredentials.StringCredentials;
@@ -29,7 +32,6 @@ import org.kohsuke.stapler.export.Exported;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials;
@@ -41,6 +43,7 @@ public class SlackNotifier extends Notifier {
     private String teamDomain;
     private String authToken;
     private String authTokenCredentialId;
+    private boolean botUser;
     private String room;
     private String sendAs;
     private boolean startNotification;
@@ -51,10 +54,20 @@ public class SlackNotifier extends Notifier {
     private boolean notifyFailure;
     private boolean notifyBackToNormal;
     private boolean notifyRepeatedFailure;
+    private int numberOfFailuresAfterToNotify;
+    private boolean notifyFailureAfterNTimess;
     private boolean includeTestSummary;
     private CommitInfoChoice commitInfoChoice;
     private boolean includeCustomMessage;
     private String customMessage;
+
+    private static String intToString(int i) {
+        if (i == -1) {
+            return ""; //$NON-NLS-1$
+        } else {
+            return Integer.toString(i);
+        }
+    }
 
     @Override
     public DescriptorImpl getDescriptor() {
@@ -65,16 +78,32 @@ public class SlackNotifier extends Notifier {
         return teamDomain;
     }
 
+    public void setTeamDomain(final String teamDomain) {
+        this.teamDomain = teamDomain;
+    }
+
     public String getRoom() {
         return room;
+    }
+
+    public void setRoom(String room) {
+        this.room = room;
     }
 
     public String getAuthToken() {
         return authToken;
     }
 
+    public void setAuthToken(String authToken) {
+        this.authToken = authToken;
+    }
+
     public String getAuthTokenCredentialId() {
         return authTokenCredentialId;
+    }
+
+    public boolean getBotUser() {
+        return botUser;
     }
 
     public String getSendAs() {
@@ -121,6 +150,14 @@ public class SlackNotifier extends Notifier {
         return notifyRepeatedFailure;
     }
 
+    public int getNumberOfFailuresAfterToNotify() {
+        return numberOfFailuresAfterToNotify;
+    }
+
+    public boolean getNotifyFailureAfterNTimes() {
+        return notifyFailureAfterNTimess;
+    }
+
     public boolean includeCustomMessage() {
         return includeCustomMessage;
     }
@@ -129,16 +166,74 @@ public class SlackNotifier extends Notifier {
         return customMessage;
     }
 
+    public void setStartNotification(boolean startNotification) {
+        this.startNotification = startNotification;
+    }
+
+    public void setNotifySuccess(boolean notifySuccess) {
+        this.notifySuccess = notifySuccess;
+    }
+
+    public void setCommitInfoChoice(CommitInfoChoice commitInfoChoice) {
+        this.commitInfoChoice = commitInfoChoice;
+    }
+
+    public void setNotifyAborted(boolean notifyAborted) {
+        this.notifyAborted = notifyAborted;
+    }
+
+    public void setNotifyFailure(boolean notifyFailure) {
+        this.notifyFailure = notifyFailure;
+    }
+
+    public void setNotifyNotBuilt(boolean notifyNotBuilt) {
+        this.notifyNotBuilt = notifyNotBuilt;
+    }
+
+    public void setNotifyUnstable(boolean notifyUnstable) {
+        this.notifyUnstable = notifyUnstable;
+    }
+
+    public void setNotifyBackToNormal(boolean notifyBackToNormal) {
+        this.notifyBackToNormal = notifyBackToNormal;
+    }
+
+    public void setIncludeTestSummary(boolean includeTestSummary) {
+        this.includeTestSummary = includeTestSummary;
+    }
+
+    public void setNotifyRepeatedFailure(boolean notifyRepeatedFailure) {
+        this.notifyRepeatedFailure = notifyRepeatedFailure;
+    }
+
+    public void setNumberOfFailuresAfterToNotify(int numberOfFailuresAfterToNotify) {
+        this.numberOfFailuresAfterToNotify = numberOfFailuresAfterToNotify;
+    }
+
+    public void setNotifyFailureAfterNTimess(boolean notifyFailureAfterNTimess) {
+        this.notifyFailureAfterNTimess = notifyFailureAfterNTimess;
+    }
+
+    public void setIncludeCustomMessage(boolean includeCustomMessage) {
+        this.includeCustomMessage = includeCustomMessage;
+    }
+
+    public void setCustomMessage(String customMessage) {
+        this.customMessage = customMessage;
+    }
+
     @DataBoundConstructor
-    public SlackNotifier(final String teamDomain, final String authToken, final String room, final String authTokenCredentialId,
+    public SlackNotifier(final String teamDomain, final String authToken, final boolean botUser, final String room, final String authTokenCredentialId,
                          final String sendAs, final boolean startNotification, final boolean notifyAborted, final boolean notifyFailure,
                          final boolean notifyNotBuilt, final boolean notifySuccess, final boolean notifyUnstable, final boolean notifyBackToNormal,
-                         final boolean notifyRepeatedFailure, final boolean includeTestSummary, CommitInfoChoice commitInfoChoice,
-                         boolean includeCustomMessage, String customMessage) {
+                         final boolean notifyRepeatedFailure, final int numberOfFailuresAfterToNotify, final boolean notifyFailureAfterNTimess,
+                         final boolean includeTestSummary, CommitInfoChoice commitInfoChoice, boolean includeCustomMessage,
+                         String customMessage) {
         super();
         this.teamDomain = teamDomain;
         this.authToken = authToken;
         this.authTokenCredentialId = StringUtils.trim(authTokenCredentialId);
+        this.botUser = botUser;
         this.room = room;
         this.sendAs = sendAs;
         this.startNotification = startNotification;
@@ -149,6 +244,8 @@ public class SlackNotifier extends Notifier {
         this.notifyUnstable = notifyUnstable;
         this.notifyBackToNormal = notifyBackToNormal;
         this.notifyRepeatedFailure = notifyRepeatedFailure;
+        this.numberOfFailuresAfterToNotify = numberOfFailuresAfterToNotify;
+        this.notifyFailureAfterNTimess = notifyFailureAfterNTimess;
         this.includeTestSummary = includeTestSummary;
         this.commitInfoChoice = commitInfoChoice;
         this.includeCustomMessage = includeCustomMessage;
@@ -165,8 +262,10 @@ public class SlackNotifier extends Notifier {
             teamDomain = getDescriptor().getTeamDomain();
         }
         String authToken = this.authToken;
+        boolean botUser = this.botUser;
         if (StringUtils.isEmpty(authToken)) {
             authToken = getDescriptor().getToken();
+            botUser = getDescriptor().getBotUser();
         }
         String authTokenCredentialId = this.authTokenCredentialId;
         if (StringUtils.isEmpty(authTokenCredentialId)) {
@@ -189,7 +288,7 @@ public class SlackNotifier extends Notifier {
         authTokenCredentialId = env.expand(authTokenCredentialId);
         room = env.expand(room);
 
-        return new StandardSlackService(teamDomain, authToken, authTokenCredentialId, room);
+        return new StandardSlackService(teamDomain, authToken, authTokenCredentialId, botUser, room);
     }
 
     @Override
@@ -217,6 +316,7 @@ public class SlackNotifier extends Notifier {
         private String teamDomain;
         private String token;
         private String tokenCredentialId;
+        private boolean botUser;
         private String room;
         private String sendAs;
 
@@ -238,6 +338,10 @@ public class SlackNotifier extends Notifier {
             return tokenCredentialId;
         }
 
+        public boolean getBotUser() {
+            return botUser;
+        }
+
         public String getRoom() {
             return room;
         }
@@ -246,7 +350,6 @@ public class SlackNotifier extends Notifier {
             return sendAs;
         }
 
-        @SuppressWarnings("unused")
         public ListBoxModel doFillTokenCredentialIdItems() {
             if (!Jenkins.getInstance().hasPermission(Jenkins.ADMINISTER)) {
                 return new ListBoxModel();
@@ -276,7 +379,9 @@ public class SlackNotifier extends Notifier {
             String teamDomain = sr.getParameter("slackTeamDomain");
             String token = sr.getParameter("slackToken");
             String tokenCredentialId = json.getString("tokenCredentialId");
+            boolean botUser = "true".equals(sr.getParameter("slackBotUser"));
             String room = sr.getParameter("slackRoom");
+
             boolean startNotification = "true".equals(sr.getParameter("slackStartNotification"));
             boolean notifySuccess = "true".equals(sr.getParameter("slackNotifySuccess"));
             boolean notifyAborted = "true".equals(sr.getParameter("slackNotifyAborted"));
@@ -285,13 +390,16 @@ public class SlackNotifier extends Notifier {
             boolean notifyFailure = "true".equals(sr.getParameter("slackNotifyFailure"));
             boolean notifyBackToNormal = "true".equals(sr.getParameter("slackNotifyBackToNormal"));
             boolean notifyRepeatedFailure = "true".equals(sr.getParameter("slackNotifyRepeatedFailure"));
+            int numberOfFailuresAfterToNotify = Integer.parseInt(sr.getParameter("numberOfFailuresAfterToNotify"));
+            boolean notifyFailureAfterNTimess = "true".equals(sr.getParameter("slacknotifyFailureAfterNTimess"));
             boolean includeTestSummary = "true".equals(sr.getParameter("includeTestSummary"));
             CommitInfoChoice commitInfoChoice = CommitInfoChoice.forDisplayName(sr.getParameter("slackCommitInfoChoice"));
             boolean includeCustomMessage = "on".equals(sr.getParameter("includeCustomMessage"));
             String customMessage = sr.getParameter("customMessage");
-            return new SlackNotifier(teamDomain, token, room, tokenCredentialId, sendAs, startNotification, notifyAborted,
+            return new SlackNotifier(teamDomain, token, botUser, room, tokenCredentialId, sendAs, startNotification, notifyAborted,
                     notifyFailure, notifyNotBuilt, notifySuccess, notifyUnstable, notifyBackToNormal, notifyRepeatedFailure,
-                    includeTestSummary, commitInfoChoice, includeCustomMessage, customMessage);
+                    numberOfFailuresAfterToNotify, notifyFailureAfterNTimess, includeTestSummary, commitInfoChoice, includeCustomMessage,
+                    customMessage);
         }
 
         @Override
@@ -299,14 +407,15 @@ public class SlackNotifier extends Notifier {
             teamDomain = sr.getParameter("slackTeamDomain");
             token = sr.getParameter("slackToken");
             tokenCredentialId = formData.getJSONObject("slack").getString("tokenCredentialId");
+            botUser = "true".equals(sr.getParameter("slackBotUser"));
             room = sr.getParameter("slackRoom");
             sendAs = sr.getParameter("slackSendAs");
             save();
             return super.configure(sr, formData);
         }
 
-        SlackService getSlackService(final String teamDomain, final String authToken, final String authTokenCredentialId, final String room) {
-            return new StandardSlackService(teamDomain, authToken, authTokenCredentialId, room);
+        SlackService getSlackService(final String teamDomain, final String authToken, final String authTokenCredentialId, final boolean botUser, final String room) {
+            return new StandardSlackService(teamDomain, authToken, authTokenCredentialId, botUser, room);
         }
 
         @Override
@@ -317,6 +426,7 @@ public class SlackNotifier extends Notifier {
         public FormValidation doTestConnection(@QueryParameter("slackTeamDomain") final String teamDomain,
                                                @QueryParameter("slackToken") final String authToken,
                                                @QueryParameter("tokenCredentialId") final String authTokenCredentialId,
+                                               @QueryParameter("slackBotUser") final boolean botUser,
                                                @QueryParameter("slackRoom") final String room) throws FormException {
             try {
                 String targetDomain = teamDomain;
@@ -324,8 +434,10 @@ public class SlackNotifier extends Notifier {
                     targetDomain = this.teamDomain;
                 }
                 String targetToken = authToken;
+                boolean targetBotUser = botUser;
                 if (StringUtils.isEmpty(targetToken)) {
                     targetToken = this.token;
+                    targetBotUser = this.botUser;
                 }
                 String targetTokenCredentialId = authTokenCredentialId;
                 if (StringUtils.isEmpty(targetTokenCredentialId)) {
@@ -335,7 +447,7 @@ public class SlackNotifier extends Notifier {
                 if (StringUtils.isEmpty(targetRoom)) {
                     targetRoom = this.room;
                 }
-                SlackService testSlackService = getSlackService(targetDomain, targetToken, targetTokenCredentialId, targetRoom);
+                SlackService testSlackService = getSlackService(targetDomain, targetToken, targetTokenCredentialId, targetBotUser, targetRoom);
                 String message = "Slack/Jenkins plugin: you're all set on " + DisplayURLProvider.get().getRoot();
                 boolean success = testSlackService.publish(message, "good");
                 return success ? FormValidation.ok("Success") : FormValidation.error("Failure");
@@ -350,6 +462,7 @@ public class SlackNotifier extends Notifier {
 
         private String teamDomain;
         private String token;
+        private boolean botUser;
         private String room;
         private boolean startNotification;
         private boolean notifySuccess;
@@ -359,6 +472,8 @@ public class SlackNotifier extends Notifier {
         private boolean notifyFailure;
         private boolean notifyBackToNormal;
         private boolean notifyRepeatedFailure;
+        private int numberOfFailuresAfterToNotify;
+        private boolean notifyFailureAfterNTimess;
         private boolean includeTestSummary;
         private boolean showCommitList;
         private boolean includeCustomMessage;
@@ -367,6 +482,7 @@ public class SlackNotifier extends Notifier {
         @DataBoundConstructor
         public SlackJobProperty(String teamDomain,
                                 String token,
+                                boolean botUser,
                                 String room,
                                 boolean startNotification,
                                 boolean notifyAborted,
@@ -376,12 +492,15 @@ public class SlackNotifier extends Notifier {
                                 boolean notifyUnstable,
                                 boolean notifyBackToNormal,
                                 boolean notifyRepeatedFailure,
+                                int numberOfFailuresAfterToNotify,
+                                boolean notifyFailureAfterNTimess,
                                 boolean includeTestSummary,
                                 boolean showCommitList,
                                 boolean includeCustomMessage,
                                 String customMessage) {
             this.teamDomain = teamDomain;
             this.token = token;
+            this.botUser = botUser;
             this.room = room;
             this.startNotification = startNotification;
             this.notifyAborted = notifyAborted;
@@ -391,6 +510,8 @@ public class SlackNotifier extends Notifier {
             this.notifyUnstable = notifyUnstable;
             this.notifyBackToNormal = notifyBackToNormal;
             this.notifyRepeatedFailure = notifyRepeatedFailure;
+            this.numberOfFailuresAfterToNotify = numberOfFailuresAfterToNotify;
+            this.notifyFailureAfterNTimess = notifyFailureAfterNTimess;
             this.includeTestSummary = includeTestSummary;
             this.showCommitList = showCommitList;
             this.includeCustomMessage = includeCustomMessage;
@@ -405,6 +526,11 @@ public class SlackNotifier extends Notifier {
         @Exported
         public String getToken() {
             return token;
+        }
+
+        @Exported
+        public boolean getBotUser() {
+            return botUser;
         }
 
         @Exported
@@ -468,6 +594,16 @@ public class SlackNotifier extends Notifier {
         }
 
         @Exported
+        public int getNumberOfFailuresAfterToNotify() {
+            return numberOfFailuresAfterToNotify;
+        }
+
+        @Exported
+        public boolean getNotifyFailureAfterNTimes() {
+            return notifyFailureAfterNTimess;
+        }
+
+        @Exported
         public boolean includeCustomMessage() {
             return includeCustomMessage;
         }
@@ -480,66 +616,21 @@ public class SlackNotifier extends Notifier {
     }
 
     @Extension(ordinal = 100) public static final class Migrator extends ItemListener {
-        @SuppressWarnings("deprecation")
         @Override
         public void onLoaded() {
             logger.info("Starting Settings Migration Process");
-            for (AbstractProject<?, ?> p : Jenkins.getInstance().getAllItems(AbstractProject.class)) {
-                logger.info("processing Job: " + p.getName());
 
-                final SlackJobProperty slackJobProperty = p.getProperty(SlackJobProperty.class);
+            ItemConfigMigrator migrator = new ItemConfigMigrator();
 
-                if (slackJobProperty == null) {
-                    logger.info(String
-                            .format("Configuration is already up to date for \"%s\", skipping migration",
-                                    p.getName()));
+            for (Item item : Jenkins.getInstance().getAllItems()) {
+                if (!migrator.migrate(item)) {
+                    logger.info(String.format("Skipping job \"%s\" with type %s", item.getName(),
+                            item.getClass().getName()));
                     continue;
                 }
-
-                SlackNotifier slackNotifier = p.getPublishersList().get(SlackNotifier.class);
-                
-                if (slackNotifier == null) {
-                    logger.info(String
-                            .format("Configuration does not have a notifier for \"%s\", not migrating settings",
-                                    p.getName()));
-                } else {
-
-                    //map settings
-                    if (StringUtils.isBlank(slackNotifier.teamDomain)) {
-                        slackNotifier.teamDomain = slackJobProperty.getTeamDomain();
-                    }
-                    if (StringUtils.isBlank(slackNotifier.authToken)) {
-                        slackNotifier.authToken = slackJobProperty.getToken();
-                    }
-                    if (StringUtils.isBlank(slackNotifier.room)) {
-                        slackNotifier.room = slackJobProperty.getRoom();
-                    }
-                    
-                    slackNotifier.startNotification = slackJobProperty.getStartNotification();
-    
-                    slackNotifier.notifyAborted = slackJobProperty.getNotifyAborted();
-                    slackNotifier.notifyFailure = slackJobProperty.getNotifyFailure();
-                    slackNotifier.notifyNotBuilt = slackJobProperty.getNotifyNotBuilt();
-                    slackNotifier.notifySuccess = slackJobProperty.getNotifySuccess();
-                    slackNotifier.notifyUnstable = slackJobProperty.getNotifyUnstable();
-                    slackNotifier.notifyBackToNormal = slackJobProperty.getNotifyBackToNormal();
-                    slackNotifier.notifyRepeatedFailure = slackJobProperty.getNotifyRepeatedFailure();
-    
-                    slackNotifier.includeTestSummary = slackJobProperty.includeTestSummary();
-                    slackNotifier.commitInfoChoice = slackJobProperty.getShowCommitList() ? CommitInfoChoice.AUTHORS_AND_TITLES : CommitInfoChoice.NONE;
-                    slackNotifier.includeCustomMessage = slackJobProperty.includeCustomMessage();
-                    slackNotifier.customMessage = slackJobProperty.getCustomMessage();
-                }
-
-                try {
-                    //property section is not used anymore - remove
-                    p.removeProperty(SlackJobProperty.class);
-                    p.save();
-                    logger.info("Configuration updated successfully");
-                } catch (IOException e) {
-                    logger.log(Level.SEVERE, e.getMessage(), e);
-                }
             }
+
+            logger.info("Completed Settings Migration Process");
         }
     }
 }
