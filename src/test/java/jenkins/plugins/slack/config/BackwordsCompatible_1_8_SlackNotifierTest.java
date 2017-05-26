@@ -42,6 +42,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
 
         assertEquals("jenkins-slack-plugin", notifier.getTeamDomain());
         assertEquals("auth-token-for-test", notifier.getAuthToken());
+        assertEquals(false, notifier.getBotUser());
         assertEquals("#slack-plugin-testing", notifier.getRoom());
 
         assertFalse(notifier.getStartNotification());
@@ -49,6 +50,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
         assertFalse(notifier.getNotifyAborted());
         assertFalse(notifier.getNotifyNotBuilt());
         assertFalse(notifier.getNotifyUnstable());
+        assertFalse(notifier.getNotifyRegression());
         assertTrue(notifier.getNotifyFailure());
         assertFalse(notifier.getNotifyBackToNormal());
         assertFalse(notifier.getNotifyRepeatedFailure());
@@ -68,6 +70,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
 
         assertEquals("jenkins-slack-plugin", notifier.getTeamDomain());
         assertEquals("auth-token-for-test", notifier.getAuthToken());
+        assertEquals(false, notifier.getBotUser());
         assertEquals("#slack-plugin-testing", notifier.getRoom());
 
         assertFalse(notifier.getStartNotification());
@@ -75,6 +78,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
         assertFalse(notifier.getNotifyAborted());
         assertFalse(notifier.getNotifyNotBuilt());
         assertFalse(notifier.getNotifyUnstable());
+        assertFalse(notifier.getNotifyRegression());
         assertTrue(notifier.getNotifyFailure());
         assertFalse(notifier.getNotifyBackToNormal());
         assertFalse(notifier.getNotifyRepeatedFailure());
@@ -94,6 +98,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
 
         assertEquals("", notifier.getTeamDomain());
         assertEquals("", notifier.getAuthToken());
+        assertEquals(false, notifier.getBotUser());
         assertEquals("", notifier.getRoom());
 
         assertFalse(notifier.getStartNotification());
@@ -101,6 +106,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
         assertFalse(notifier.getNotifyAborted());
         assertFalse(notifier.getNotifyNotBuilt());
         assertFalse(notifier.getNotifyUnstable());
+        assertFalse(notifier.getNotifyRegression());
         assertTrue(notifier.getNotifyFailure());
         assertFalse(notifier.getNotifyBackToNormal());
         assertFalse(notifier.getNotifyRepeatedFailure());
@@ -148,6 +154,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
 
         assertEquals("", notifier.getTeamDomain());
         assertEquals("", notifier.getAuthToken());
+        assertEquals(false, notifier.getBotUser());
         assertEquals("", notifier.getRoom());
 
         assertTrue(notifier.getStartNotification());
@@ -155,6 +162,7 @@ public class BackwordsCompatible_1_8_SlackNotifierTest {
         assertTrue(notifier.getNotifyAborted());
         assertTrue(notifier.getNotifyNotBuilt());
         assertTrue(notifier.getNotifyUnstable());
+        assertTrue(notifier.getNotifyRegression());
         assertTrue(notifier.getNotifyFailure());
         assertTrue(notifier.getNotifyBackToNormal());
         assertTrue(notifier.getNotifyRepeatedFailure());

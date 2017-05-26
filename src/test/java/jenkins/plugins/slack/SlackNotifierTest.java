@@ -52,7 +52,7 @@ public class SlackNotifierTest extends TestCase {
         }
         descriptor.setSlackService(slackServiceStub);
         try {
-            FormValidation result = descriptor.doTestConnection("teamDomain", "authToken", "authTokenCredentialId", "room");
+            FormValidation result = descriptor.doTestConnection("baseUrl", "teamDomain", "authToken", "authTokenCredentialId", false,"room", "apiToken", "apiTokenCredentialId");
             assertEquals(result.kind, expectedResult);
         } catch (Descriptor.FormException e) {
             e.printStackTrace();
@@ -63,6 +63,7 @@ public class SlackNotifierTest extends TestCase {
     public static class SlackServiceStub implements SlackService {
 
         private boolean response;
+        private String username = "";
 
         public boolean publish(String message) {
             return response;
@@ -72,8 +73,18 @@ public class SlackNotifierTest extends TestCase {
             return response;
         }
 
+        public String getUserId(String email) {
+            return null;
+        }
+
+        public void testApi() throws Exception { }
+
         public void setResponse(boolean response) {
             this.response = response;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
         }
     }
 }

@@ -24,6 +24,11 @@
         <f:checkbox name="slackNotifyUnstable" value="true" checked="${instance.getNotifyUnstable()}"/>
     </f:entry>
 
+    <f:entry title="Notify Regression">
+        <f:checkbox name="slackNotifyRegression" value="true" checked="${instance.getNotifyRegression()}"/>
+    </f:entry>
+
+
     <f:entry title="Notify Back To Normal">
         <f:checkbox name="slackNotifyBackToNormal" value="true" checked="${instance.getNotifyBackToNormal()}"/>
     </f:entry>
@@ -35,6 +40,9 @@
         </f:entry>
         <f:entry title="Include Test Summary">
             <f:checkbox name="includeTestSummary" value="true" checked="${instance.includeTestSummary()}"/>
+        </f:entry>
+        <f:entry title="Include Failed Tests">
+            <f:checkbox name="includeFailedTests" value="true" checked="${instance.includeFailedTests()}"/>
         </f:entry>
 
         <f:optionalBlock name="includeCustomMessage" title="Include Custom Message" checked="${instance.includeCustomMessage()}">
@@ -51,6 +59,10 @@
             </select>
         </f:entry>
 
+        <f:entry title="Base URL" help="/plugin/slack/help-projectConfig-slackBaseUrl.html">
+            <f:textbox name="slackBaseUrl" value="${instance.getBaseUrl()}"/>
+        </f:entry>
+
         <f:entry title="Team Subdomain" help="/plugin/slack/help-projectConfig-slackTeamDomain.html">
             <f:textbox name="slackTeamDomain" value="${instance.getTeamDomain()}"/>
         </f:entry>
@@ -63,11 +75,24 @@
             <c:select value="${instance.getAuthTokenCredentialId()}"/>
         </f:entry>
 
+        <f:entry title="Is Bot User?" help="/plugin/slack/help-projectConfig-botUser.html">
+            <f:checkbox name="slackBotUser" value="true" checked="${instance.getBotUser()}"/>
+        </f:entry>
+
         <f:entry title="Project Channel" help="/plugin/slack/help-projectConfig-slackRoom.html">
             <f:textbox name="slackRoom" value="${instance.getRoom()}"/>
         </f:entry>
+
+        <f:entry title="API Token" help="/plugin/slack/help-projectConfig-slackApiToken.html">
+            <f:textbox field="apiToken" name="slackApiToken" value="${instance.getApiToken()}"/>
+        </f:entry>
+
+        <f:entry title="API Token Credential ID" help="/plugin/slack/help-projectConfig-slackApiTokenCredentialId.html" field="apiTokenCredentialId" name="slackApiTokenCredentialId" >
+            <c:select value="${instance.getApiTokenCredentialId()}"/>
+        </f:entry>
+
         <f:validateButton
                 title="${%Test Connection}" progress="${%Testing...}"
-                method="testConnection" with="slackTeamDomain,slackToken,tokenCredentialId,slackRoom"/>
+                method="testConnection" with="slackBaseUrl,slackTeamDomain,slackToken,tokenCredentialId,slackRoom,slackApiToken,slackApiTokenCredentialId"/>
     </f:advanced>
 </j:jelly>

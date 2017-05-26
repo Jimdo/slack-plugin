@@ -1,49 +1,55 @@
 package jenkins.plugins.slack;
 
-import hudson.security.ACL;
-
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.methods.PostMethod;
-
-import org.jenkinsci.plugins.plaincredentials.StringCredentials;
-
 import com.cloudbees.plugins.credentials.CredentialsMatcher;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
-import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
-
-import org.json.JSONObject;
+import hudson.security.ACL;
+import jenkins.model.Jenkins;
+import org.apache.commons.httpclient.methods.GetMethod;
+import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpStatus;
+import org.apache.http.NameValuePair;
+import org.jenkinsci.plugins.plaincredentials.StringCredentials;
 import org.json.JSONArray;
+import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import jenkins.model.Jenkins;
-import hudson.ProxyConfiguration;
-
-import org.apache.commons.httpclient.UsernamePasswordCredentials;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.lang.StringUtils;
 
 public class StandardSlackService implements SlackService {
 
     private static final Logger logger = Logger.getLogger(StandardSlackService.class.getName());
 
     private String host = "slack.com";
+    private String baseUrl;
     private String teamDomain;
     private String token;
     private String authTokenCredentialId;
+    private boolean botUser;
     private String[] roomIds;
+    private String apiToken;
+    private String apiTokenCredentialId;
 
-    public StandardSlackService(String teamDomain, String token, String authTokenCredentialId, String roomId) {
+    public StandardSlackService(String baseUrl, String teamDomain, String token, String authTokenCredentialId, boolean botUser, String roomId, String apiToken, String apiTokenCredentialId) {
         super();
+        this.baseUrl = baseUrl;
+        if(this.baseUrl != null && !this.baseUrl.isEmpty() && !this.baseUrl.endsWith("/")) {
+            this.baseUrl += "/";
+        }
         this.teamDomain = teamDomain;
         this.token = token;
         this.authTokenCredentialId = StringUtils.trim(authTokenCredentialId);
+        this.botUser = botUser;
         this.roomIds = roomId.split("[,; ]+");
+        this.apiToken = apiToken;
+        this.apiTokenCredentialId = StringUtils.trim(apiTokenCredentialId);
     }
 
     public boolean publish(String message) {
@@ -53,31 +59,31 @@ public class StandardSlackService implements SlackService {
     public boolean publish(String message, String color) {
         boolean result = true;
         for (String roomId : roomIds) {
-            String url = "https://" + teamDomain + "." + host + "/services/hooks/jenkins-ci?token=" + getTokenToUse();
-            logger.fine("Posting: to " + roomId + " on " + teamDomain + " using " + url +": " + message + " " + color);
-            HttpClient client = getHttpClient();
-            PostMethod post = new PostMethod(url);
-            JSONObject json = new JSONObject();
+            //prepare attachments first
+            JSONObject attachment = new JSONObject();
+            attachment.put("text", message);
+            attachment.put("fallback", message);
+            attachment.put("color", color);
 
-            try {
-                JSONObject field = new JSONObject();
-                field.put("short", false);
-                field.put("value", message);
+            JSONArray mrkdwn = new JSONArray();
+            mrkdwn.put("pretext");
+            mrkdwn.put("text");
+            mrkdwn.put("fields");
+            attachment.put("mrkdwn_in", mrkdwn);
+            JSONArray attachments = new JSONArray();
+            attachments.put(attachment);
 
-                JSONArray fields = new JSONArray();
-                fields.put(field);
-
-                JSONObject attachment = new JSONObject();
-                attachment.put("fallback", message);
-                attachment.put("color", color);
-                attachment.put("fields", fields);
-                JSONArray mrkdwn = new JSONArray();
-                mrkdwn.put("pretext");
-                mrkdwn.put("text");
-                mrkdwn.put("fields");
-                attachment.put("mrkdwn_in", mrkdwn);
-                JSONArray attachments = new JSONArray();
-                attachments.put(attachment);
+            PostMethod post;
+            String url;
+            List<NameValuePair> nvps = new ArrayList<NameValuePair>();
+            //prepare post methods for both requests types
+            if (!botUser || !StringUtils.isEmpty(baseUrl)) {
+                url = "https://" + teamDomain + "." + host + "/services/hooks/jenkins-ci?token=" + getTokenToUse();
+                if (!StringUtils.isEmpty(baseUrl)) {
+                    url = baseUrl + getTokenToUse();
+                }
+                post = new PostMethod(url);
+                JSONObject json = new JSONObject();
 
                 json.put("channel", roomId);
                 json.put("attachments", attachments);
@@ -85,14 +91,32 @@ public class StandardSlackService implements SlackService {
 
                 post.addParameter("payload", json.toString());
                 post.getParams().setContentCharset("UTF-8");
-                int responseCode = client.executeMethod(post);
-                String response = post.getResponseBodyAsString();
-                if(responseCode != HttpStatus.SC_OK) {
-                    logger.log(Level.WARNING, "Slack post may have failed. Response: " + response);
-                    result = false;
+            } else {
+                url = "https://slack.com/api/chat.postMessage?token=" + getTokenToUse() +
+                        "&channel=" + roomId +
+                        "&link_names=1" +
+                        "&as_user=true";
+                try {
+                    url += "&attachments=" + URLEncoder.encode(attachments.toString(), "utf-8");
+                } catch (UnsupportedEncodingException e) {
+                    logger.log(Level.ALL, "Error while encoding attachments: " + e.getMessage());
                 }
-                else {
-                    logger.fine("Posting succeeded");
+                post = new PostMethod(url);
+            }
+            logger.fine("Posting: to " + roomId + " on " + teamDomain + " using " + url + ": " + message + " " + color);
+            Client client = getClient();
+
+            try {
+            	ClientResponse response = client.request(post);
+
+            	int responseCode = response.getStatusCode();
+            	if(responseCode != HttpStatus.SC_OK) {
+            		 String responseString = response.getBody();
+            		 logger.log(Level.WARNING, "Slack post may have failed. Response: " + responseString);
+            		 logger.log(Level.WARNING, "Response Code: " + responseCode);
+            		 result = false;
+                } else {
+                    logger.info("Posting succeeded");
                 }
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Error posting to Slack", e);
@@ -102,6 +126,77 @@ public class StandardSlackService implements SlackService {
             }
         }
         return result;
+    }
+
+    public String getUserId(String email) {
+
+        if (StringUtils.isEmpty(getApiTokenToUse())) {
+            return null;
+        }
+
+        String url = "https://" + host + "/api/users.list?token=" + getApiTokenToUse();
+        logger.info("Getting: users list");
+        Client client = getClient();
+        GetMethod get = new GetMethod(url);
+        try {
+            ClientResponse response = client.request(get);
+
+            String responseBody = response.getBody();
+            if (response.getStatusCode() != HttpStatus.SC_OK) {
+                logger.log(Level.WARNING, "Slack get request may have failed. Response: " + responseBody);
+                return null;
+            }
+            logger.info("Getting succeeded");
+            JSONObject responseJSON = new JSONObject(responseBody);
+
+            Boolean ok = responseJSON.getBoolean("ok");
+            if (!ok) {
+                String error = responseJSON.getString("error");
+                logger.log(Level.WARNING, "Slack get request may have failed. Error: " + error);
+                return null;
+            }
+
+            // TODO: Cache this somewhere
+            JSONArray members = responseJSON.getJSONArray("members");
+            for (int i = 0; i < members.length(); i++) {
+                JSONObject member = members.getJSONObject(i);
+                if (email.equals(member.getJSONObject("profile").optString("email"))) {
+                    return member.getString("id");
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            get.releaseConnection();
+        }
+        return null;
+    }
+
+    public void testApi() throws Exception {
+
+        if (StringUtils.isEmpty(getApiTokenToUse())) {
+            throw new Exception("API request to Slack failed: API token is empty");
+        }
+
+        String url = "https://" + host + "/api/auth.test?token=" + getApiTokenToUse();
+        Client client = getClient();
+        GetMethod get = new GetMethod(url);
+        try {
+            ClientResponse response = client.request(get);
+            String responseBody = response.getBody();
+            if (response.getStatusCode() != HttpStatus.SC_OK) {
+                throw new Exception("request failed: " + responseBody);
+            }
+            JSONObject responseJSON = new JSONObject(responseBody);
+
+            Boolean ok = responseJSON.getBoolean("ok");
+            if (!ok) {
+                String error = responseJSON.getString("error");
+                throw new Exception(error);
+            }
+        } finally {
+            get.releaseConnection();
+        }
     }
 
     private String getTokenToUse() {
@@ -118,32 +213,24 @@ public class StandardSlackService implements SlackService {
         return token;
     }
 
+    private String getApiTokenToUse() {
+        if (apiTokenCredentialId != null && !apiTokenCredentialId.isEmpty()) {
+            StringCredentials credentials = lookupCredentials(apiTokenCredentialId);
+            if (credentials != null) {
+                return credentials.getSecret().getPlainText();
+            }
+        }
+        return apiToken;
+    }
+
     private StringCredentials lookupCredentials(String credentialId) {
-        List<StringCredentials> credentials = CredentialsProvider.lookupCredentials(StringCredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.<DomainRequirement>emptyList());
+        List<StringCredentials> credentials = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(StringCredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.<DomainRequirement>emptyList());
         CredentialsMatcher matcher = CredentialsMatchers.withId(credentialId);
         return CredentialsMatchers.firstOrNull(credentials, matcher);
     }
 
-    protected HttpClient getHttpClient() {
-        HttpClient client = new HttpClient();
-        if (Jenkins.getInstance() != null) {
-            ProxyConfiguration proxy = Jenkins.getInstance().proxy;
-            if (proxy != null) {
-                client.getHostConfiguration().setProxy(proxy.name, proxy.port);
-                String username = proxy.getUserName();
-                String password = proxy.getPassword();
-                // Consider it to be passed if username specified. Sufficient?
-                if (username != null && !"".equals(username.trim())) {
-                    logger.info("Using proxy authentication (user=" + username + ")");
-                    // http://hc.apache.org/httpclient-3.x/authentication.html#Proxy_Authentication
-                    // and
-                    // http://svn.apache.org/viewvc/httpcomponents/oac.hc3x/trunk/src/examples/BasicAuthenticationExample.java?view=markup
-                    client.getState().setProxyCredentials(AuthScope.ANY,
-                        new UsernamePasswordCredentials(username, password));
-                }
-            }
-        }
-        return client;
+    protected Client getClient() {
+        return new StandardClient();
     }
 
     void setHost(String host) {
